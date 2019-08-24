@@ -54,14 +54,14 @@ const RADIALG_ATTS = CIRCLE_ATTS.concat(['id', 'gradientUnits']);
 const STOP_ATTS = ['offset'];
 const ELLIPSE_ATTS = ['cx', 'cy', 'rx', 'ry'];
 
-const TEXT_ATTS = ['fontFamily', 'fontSize', 'fontWeight', 'textAnchor']
+const TEXT_ATTS = ['fontFamily', 'fontSize', 'fontWeight']
 
 const POLYGON_ATTS = ['points'];
 const POLYLINE_ATTS = ['points'];
 
 const COMMON_ATTS = ['fill', 'fillOpacity', 'stroke', 'strokeWidth', 'strokeOpacity', 'opacity',
     'strokeLinecap', 'strokeLinejoin',
-    'strokeDasharray', 'strokeDashoffset', 'x', 'y', 'rotate', 'scale', 'origin', 'originX', 'originY', 'transform', 'clipPath'];
+    'strokeDasharray', 'strokeDashoffset', 'x', 'y', 'rotate', 'scale', 'origin', 'originX', 'originY'];
 
 let ind = 0;
 
@@ -83,7 +83,7 @@ class SvgUri extends Component{
   constructor(props){
     super(props);
 
-    this.state = {fill: props.fill, svgXmlData: props.svgXmlData};
+    this.state = { ...props };
 
     this.createSVGElement     = this.createSVGElement.bind(this);
     this.obtainComponentAtts  = this.obtainComponentAtts.bind(this);
@@ -99,48 +99,44 @@ class SvgUri extends Component{
     }
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.isComponentMounted = true;
   }
 
-  componentWillReceiveProps (nextProps){
+  static getDerivedStateFromProps (nextProps, state){
     if (nextProps.source) {
       const source = resolveAssetSource(nextProps.source) || {};
-      const oldSource = resolveAssetSource(this.props.source) || {};
+      const oldSource = resolveAssetSource(state.source) || {};
       if(source.uri !== oldSource.uri){
         this.fetchSVGData(source.uri);
       }
     }
 
-    if (nextProps.svgXmlData !== this.props.svgXmlData) {
-      this.setState({ svgXmlData: nextProps.svgXmlData });
+    if (nextProps.svgXmlData !== state.svgXmlData && nextProps.svgXmlData) {
+      state = { ...state, svgXmlData: nextProps.svgXmlData };
     }
 
-    if (nextProps.fill !== this.props.fill) {
-      this.setState({ fill: nextProps.fill });
+    if (nextProps.fill !== state.fill && nextProps.fill) {
+      state = { ...state, fill: nextProps.fill };
     }
+
+    return state;
   }
 
   componentWillUnmount() {
     this.isComponentMounted = false
   }
 
-  async fetchSVGData(uri) {
-    let responseXML = null, error = null;
+  async fetchSVGData(uri){
+    let responseXML = null;
     try {
       const response = await fetch(uri);
       responseXML = await response.text();
     } catch(e) {
-      error = e;
       console.error("ERROR SVG", e);
     } finally {
       if (this.isComponentMounted) {
-        this.setState({ svgXmlData: responseXML }, () => {
-          const { onLoad } = this.props;
-          if (onLoad && !error) {
-            onLoad();
-          }
-        });
+        this.setState({svgXmlData:responseXML});
       }
     }
 
@@ -150,8 +146,8 @@ class SvgUri extends Component{
   // Remove empty strings from children array
   trimElementChilden(children) {
     for (child of children) {
-      if (typeof child === 'string') { 
-        if (child.trim().length === 0) 
+      if (typeof child === 'string') {
+        if (child.trim.length === 0)
           children.splice(children.indexOf(child), 1);
       }
     }
@@ -209,6 +205,9 @@ class SvgUri extends Component{
       return <Polyline key={i} {...componentAtts}>{childs}</Polyline>;
     case 'text':
       componentAtts = this.obtainComponentAtts(node, TEXT_ATTS);
+      if (componentAtts.y) {
+        componentAtts.y = fixYPosition(componentAtts.y, node)
+      }
       return <Text key={i} {...componentAtts}>{childs}</Text>;
     case 'tspan':
       componentAtts = this.obtainComponentAtts(node, TEXT_ATTS);
@@ -223,11 +222,6 @@ class SvgUri extends Component{
 
   obtainComponentAtts({attributes}, enabledAttributes) {
     const styleAtts = {};
-
-    if (this.state.fill && this.props.fillAll) {
-      styleAtts.fill = this.state.fill;
-    }
-
     Array.from(attributes).forEach(({nodeName, nodeValue}) => {
       Object.assign(styleAtts, utils.transformStyle({
         nodeName,
@@ -252,7 +246,7 @@ class SvgUri extends Component{
   inspectNode(node){
     // Only process accepted elements
     if (!ACCEPTED_SVG_ELEMENTS.includes(node.nodeName)) {
-      return (<View />);
+      return null;
     }
 
     // Process the xml node
@@ -286,7 +280,7 @@ class SvgUri extends Component{
       const inputSVG = this.state.svgXmlData.substring(
         this.state.svgXmlData.indexOf("<svg "),
         (this.state.svgXmlData.indexOf("</svg>") + 6)
-      ).replace(/<!-(.*?)->/g, '');
+      );
 
       const doc = new xmldom.DOMParser().parseFromString(inputSVG);
 
@@ -311,8 +305,6 @@ SvgUri.propTypes = {
   svgXmlData: PropTypes.string,
   source: PropTypes.any,
   fill: PropTypes.string,
-  onLoad: PropTypes.func,
-  fillAll: PropTypes.bool
 }
 
 module.exports = SvgUri;
